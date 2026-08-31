@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Data Tally Checker</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f4f7fb;
+        color: #1f2937;
+    }
+    .container {
+        max-width: 1100px;
+        margin: 35px auto;
+        padding: 0 20px;
+    }
+    .header {
+        background: #172554;
+        color: white;
+        border-radius: 14px;
+        padding: 25px 30px;
+        margin-bottom: 20px;
+    }
+    .header h1 { margin: 0 0 8px; font-size: 28px; }
+    .header p { margin: 0; color: #dbeafe; }
+    .card {
+        background: white;
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
+    }
+    .files {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+    .file-box {
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+        transition: .2s;
+    }
+    .file-box:hover { border-color: #2563eb; background: #f8fbff; }
+    .file-box h3 { margin-top: 0; }
+    input[type=file] { width: 100%; margin-top: 12px; }
+    button {
+        border: 0;
+        border-radius: 9px;
+        padding: 12px 22px;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    #compareBtn {
+        background: #2563eb;
+        color: white;
+        margin-top: 20px;
+    }
+    #compareBtn:hover { background: #1d4ed8; }
+    #clearBtn {
+        background: #e5e7eb;
+        color: #111827;
+        margin-left: 8px;
+    }
+    .status {
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 18px;
+        font-weight: bold;
+        font-size: 19px;
+    }
+    .match { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .not-match { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 15px 0;
+    }
+    .metric {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 15px;
+    }
+    .metric .number { font-size: 24px; font-weight: bold; }
+    .metric .label { color: #64748b; font-size: 13px; margin-top: 4px; }
+    .table-wrap {
+        overflow: auto;
+        max-height: 520px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        margin-top: 12px;
+    }
+    table { border-collapse: collapse; width: 100%; min-width: 650px; }
+    th, td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 9px 11px;
+        text-align: left;
+        white-space: nowrap;
+        font-size: 13px;
+    }
+    th {
+        background: #f1f5f9;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    tr.diff { background: #fff7ed; }
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .badge-missing { background: #fee2e2; color: #991b1b; }
+    .badge-extra { background: #fef3c7; color: #92400e; }
+    .badge-diff { background: #dbeafe; color: #1e40af; }
+    .small { font-size: 13px; color: #64748b; line-height: 1.5; }
+    .hidden { display: none; }
+    .error { color: #b91c1c; margin-top: 12px; font-weight: bold; }
+    .section-title { margin-bottom: 8px; }
+    @media (max-width: 750px) {
+        .files, .summary { grid-template-columns: 1fr; }
+        .container { margin-top: 15px; }
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Excel Data Tally Checker</h1>
+        <p>Compare two Excel files while ignoring row order. The actual data must match.</p>
+    </div>
+
+    <div class="card">
+        <div class="files">
+            <div class="file-box">
+                <h3>Excel File 1</h3>
+                <div class="small">Select the first .xlsx or .xls file</div>
+                <input type="file" id="file1" accept=".xlsx,.xls,.csv">
+                <div id="name1" class="small"></div>
+            </div>
+
+            <div class="file-box">
+                <h3>Excel File 2</h3>
+                <div class="small">Select the second .xlsx or .xls file</div>
+                <input type="file" id="file2" accept=".xlsx,.xls,.csv">
+                <div id="name2" class="small"></div>
+            </div>
+        </div>
+
+        <button id="compareBtn">Compare Files</button>
+        <button id="clearBtn" type="button">Clear</button>
+        <div id="error" class="error"></div>
+    </div>
+
+    <div id="result" class="card hidden"></div>
+</div>
+
+<script>
+const file1Input = document.getElementById('file1');
+const file2Input = document.getElementById('file2');
+const compareBtn = document.getElementById('compareBtn');
+const clearBtn = document.getElementById('clearBtn');
+const result = document.getElementById('result');
+const errorBox = document.getElementById('error');
+
+file1Input.addEventListener('change', () => {
+    document.getElementById('name1').textContent =
+        file1Input.files[0] ? file1Input.files[0].name : '';
+});
+file2Input.addEventListener('change', () => {
+    document.getElementById('name2').textContent =
+        file2Input.files[0] ? file2Input.files[0].name : '';
+});
+
+function normalizeValue(value) {
+    if (value === null || value === undefined) return '';
+
+    // Excel dates/numbers are kept in a stable textual form.
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+
+    if (typeof value === 'number') {
+        if (Number.isNaN(value)) return '';
+        // Avoid false differences such as 10 and 10.0.
+        return Number.isInteger(value) ? String(value) : String(value);
+    }
+
+    return String(value).trim();
+}
+
+function rowKey(row) {
+    return row.map(normalizeValue).join('\\u001F');
+}
+
+function makeRectangular(rows) {
+    let maxCols = 0;
+    rows.forEach(r => { if (r.length > maxCols) maxCols = r.length; });
+
+    return rows.map(r => {
+        const out = r.slice();
+        while (out.length < maxCols) out.push('');
+        return out.map(normalizeValue);
+    });
+}
+
+async function readWorkbook(file) {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, {
+        type: 'array',
+        cellDates: true,
+        raw: true
+    });
+
+    if (!workbook.SheetNames.length) {
+        throw new Error('The workbook contains no worksheets.');
+    }
+
+    // Compare the first worksheet in each workbook.
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: '',
+        blankrows: true,
+        raw: true
+    });
+
+    return {
+        sheetName,
+        rows: makeRectangular(rows)
+    };
+}
+
+function countNonEmptyRows(rows) {
+    return rows.filter(r => r.some(v => normalizeValue(v) !== '')).length;
+}
+
+function cleanTrailingEmptyRows(rows) {
+    let end = rows.length;
+    while (end > 0 && rows[end - 1].every(v => normalizeValue(v) === '')) end--;
+    return rows.slice(0, end);
+}
+
+function compareRowsIgnoringOrder(rows1, rows2) {
+    const map1 = new Map();
+    const map2 = new Map();
+
+    rows1.forEach((row, index) => {
+        const key = rowKey(row);
+        if (!map1.has(key)) map1.set(key, []);
+        map1.get(key).push(index + 1);
+    });
+
+    rows2.forEach((row, index) => {
+        const key = rowKey(row);
+        if (!map2.has(key)) map2.set(key, []);
+        map2.get(key).push(index + 1);
+    });
+
+    const missing = [];
+    const extra = [];
+    const matchedRows = [];
+
+    // Every row is treated as a record. Duplicate rows are counted correctly.
+    for (const [key, positions1] of map1.entries()) {
+        const positions2 = map2.get(key) || [];
+        const common = Math.min(positions1.length, positions2.length);
+
+        for (let i = 0; i < common; i++) {
+            matchedRows.push({
+                file1Row: positions1[i],
+                file2Row: positions2[i],
+                row: rows1[positions1[i] - 1]
+            });
+        }
+
+        for (let i = common; i < positions1.length; i++) {
+            missing.push({
+                file1Row: positions1[i],
+                row: rows1[positions1[i] - 1]
+            });
+        }
+    }
+
+    for (const [key, positions2] of map2.entries()) {
+        const positions1 = map1.get(key) || [];
+        const common = Math.min(positions1.length, positions2.length);
+
+        for (let i = common; i < positions2.length; i++) {
+            extra.push({
+                file2Row: positions2[i],
+                row: rows2[positions2[i] - 1]
+            });
+        }
+    }
+
+    return { missing, extra, matchedRows };
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function rowHtml(row, rowNumber, badgeClass, badgeText) {
+    return `<tr>
+        <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+        <td>${rowNumber}</td>
+        ${row.map(v => `<td>${escapeHtml(v)}</td>`).join('')}
+    </tr>`;
+}
+
+function renderResult(data1, data2, comparison, file1, file2) {
+    const { missing, extra, matchedRows } = comparison;
+    const sameColumnCount = data1.rows[0]?.length === data2.rows[0]?.length;
+    const same = missing.length === 0 && extra.length === 0 && sameColumnCount;
+
+    const maxCols = Math.max(
+        data1.rows.reduce((m, r) => Math.max(m, r.length), 0),
+        data2.rows.reduce((m, r) => Math.max(m, r.length), 0)
+    );
+
+    let html = `
+        <div class="status ${same ? 'match' : 'not-match'}">
+            ${same ? '✓ DATA MATCH — Both Excel files contain the same data.' :
+                     '✗ DATA NOT MATCH — The Excel files contain differences.'}
+        </div>
+
+        <div class="summary">
+            <div class="metric">
+                <div class="number">${countNonEmptyRows(data1.rows)}</div>
+                <div class="label">Rows in File 1</div>
+            </div>
+            <div class="metric">
+                <div class="number">${countNonEmptyRows(data2.rows)}</div>
+                <div class="label">Rows in File 2</div>
+            </div>
+            <div class="metric">
+                <div class="number">${matchedRows.length}</div>
+                <div class="label">Matching Rows</div>
+            </div>
+            <div class="metric">
+                <div class="number">${missing.length + extra.length}</div>
+                <div class="label">Different / Missing / Extra</div>
+            </div>
+        </div>
+
+        <p class="small">
+            <strong>File 1:</strong> ${escapeHtml(file1.name)}
+            &nbsp; | &nbsp;
+            <strong>Sheet:</strong> ${escapeHtml(data1.sheetName)}
+            <br>
+            <strong>File 2:</strong> ${escapeHtml(file2.name)}
+            &nbsp; | &nbsp;
+            <strong>Sheet:</strong> ${escapeHtml(data2.sheetName)}
+            <br><br>
+            Comparison rule: <strong>row order is ignored</strong>. Rows are matched as complete records,
+            and duplicate rows are counted correctly.
+        </p>
+    `;
+
+    if (!sameColumnCount) {
+        html += `
+            <div class="status not-match">
+                Column count is different: File 1 has ${data1.rows[0]?.length || 0}
+                columns, while File 2 has ${data2.rows[0]?.length || 0} columns.
+            </div>
+        `;
+    }
+
+    if (missing.length || extra.length) {
+        html += `<h3 class="section-title">Differences Found</h3>`;
+        html += `<div class="table-wrap"><table><thead><tr>
+            <th>Status</th><th>Original Row</th>
+            ${Array.from({length: maxCols}, (_, i) => `<th>Column ${i + 1}</th>`).join('')}
+        </tr></thead><tbody>`;
+
+        missing.forEach(item => {
+            const padded = item.row.concat(Array(maxCols - item.row.length).fill(''));
+            html += rowHtml(padded, item.file1Row, 'badge-missing', 'Missing in File 2');
+        });
+
+        extra.forEach(item => {
+            const padded = item.row.concat(Array(maxCols - item.row.length).fill(''));
+            html += rowHtml(padded, item.file2Row, 'badge-extra', 'Extra in File 2');
+        });
+
+        html += `</tbody></table></div>`;
+    } else {
+        html += `
+            <div class="status match">
+                All rows have matching values. Their order may be different, but the data matches.
+            </div>
+        `;
+    }
+
+    result.innerHTML = html;
+    result.classList.remove('hidden');
+}
+
+compareBtn.addEventListener('click', async () => {
+    errorBox.textContent = '';
+    result.classList.add('hidden');
+
+    if (!file1Input.files[0] || !file2Input.files[0]) {
+        errorBox.textContent = 'Please select both Excel files.';
+        return;
+    }
+
+    compareBtn.disabled = true;
+    compareBtn.textContent = 'Comparing...';
+
+    try {
+        const file1 = file1Input.files[0];
+        const file2 = file2Input.files[0];
+
+        const [data1, data2] = await Promise.all([
+            readWorkbook(file1),
+            readWorkbook(file2)
+        ]);
+
+        data1.rows = cleanTrailingEmptyRows(data1.rows);
+        data2.rows = cleanTrailingEmptyRows(data2.rows);
+
+        const comparison = compareRowsIgnoringOrder(data1.rows, data2.rows);
+
+        renderResult(data1, data2, comparison, file1, file2);
+    } catch (err) {
+        console.error(err);
+        errorBox.textContent =
+            'Unable to read the Excel files. Please check that they are valid .xlsx/.xls files.';
+    } finally {
+        compareBtn.disabled = false;
+        compareBtn.textContent = 'Compare Files';
+    }
+});
+
+clearBtn.addEventListener('click', () => {
+    file1Input.value = '';
+    file2Input.value = '';
+    document.getElementById('name1').textContent = '';
+    document.getElementById('name2').textContent = '';
+    errorBox.textContent = '';
+    result.innerHTML = '';
+    result.classList.add('hidden');
+});
+</script>
+
+</body>
+</html>

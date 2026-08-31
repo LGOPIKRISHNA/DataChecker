@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Data Tally Checker</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f4f7fb;
+        color: #1f2937;
+    }
+    .container {
+        max-width: 1100px;
+        margin: 35px auto;
+        padding: 0 20px;
+    }
+    .header {
+        background: #172554;
+        color: white;
+        border-radius: 14px;
+        padding: 25px 30px;
+        margin-bottom: 20px;
+    }
+    .header h1 { margin: 0 0 8px; font-size: 28px; }
+    .header p { margin: 0; color: #dbeafe; }
+    .card {
+        background: white;
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
+    }
+    .files {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+    }
+    .file-count-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .file-count-row label {
+        font-weight: bold;
+    }
+    #fileCount {
+        min-width: 90px;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 15px;
+        background: white;
+    }
+    .file-box {
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+        transition: .2s;
+    }
+    .file-box:hover { border-color: #2563eb; background: #f8fbff; }
+    .file-box h3 { margin-top: 0; }
+    input[type=file] { width: 100%; margin-top: 12px; }
+    button {
+        border: 0;
+        border-radius: 9px;
+        padding: 12px 22px;
+        font-size: 15px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    #compareBtn {
+        background: #2563eb;
+        color: white;
+        margin-top: 20px;
+    }
+    #compareBtn:hover { background: #1d4ed8; }
+    #clearBtn {
+        background: #e5e7eb;
+        color: #111827;
+        margin-left: 8px;
+    }
+    .status {
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 18px;
+        font-weight: bold;
+        font-size: 19px;
+    }
+    .match { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .not-match { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 15px 0;
+    }
+    .metric {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 15px;
+    }
+    .metric .number { font-size: 24px; font-weight: bold; }
+    .metric .label { color: #64748b; font-size: 13px; margin-top: 4px; }
+    .table-wrap {
+        overflow: auto;
+        max-height: 520px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        margin-top: 12px;
+    }
+    table { border-collapse: collapse; width: 100%; min-width: 650px; }
+    th, td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 9px 11px;
+        text-align: left;
+        white-space: nowrap;
+        font-size: 13px;
+    }
+    th {
+        background: #f1f5f9;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    tr.diff { background: #fff7ed; }
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .badge-missing { background: #fee2e2; color: #991b1b; }
+    .badge-extra { background: #fef3c7; color: #92400e; }
+    .badge-diff { background: #dbeafe; color: #1e40af; }
+    .small { font-size: 13px; color: #64748b; line-height: 1.5; }
+    .hidden { display: none; }
+    .error { color: #b91c1c; margin-top: 12px; font-weight: bold; }
+    .section-title { margin-bottom: 8px; }
+    @media (max-width: 750px) {
+        .files, .summary { grid-template-columns: 1fr; }
+        .container { margin-top: 15px; }
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Excel Data Tally Checker</h1>
+        <p>Compare multiple Excel files while ignoring row order. All files must contain exactly the same data.</p>
+    </div>
+
+    <div class="card">
+        <div class="file-count-row">
+            <label for="fileCount">Number of Excel files to compare:</label>
+            <select id="fileCount">
+                <option value="2">2 files</option>
+                <option value="3">3 files</option>
+                <option value="4">4 files</option>
+                <option value="5">5 files</option>
+                <option value="6">6 files</option>
+                <option value="7">7 files</option>
+                <option value="8">8 files</option>
+                <option value="9">9 files</option>
+                <option value="10">10 files</option>
+            </select>
+        </div>
+
+        <div class="files" id="filesContainer"></div>
+
+        <button id="compareBtn">Compare Files</button>
+        <button id="clearBtn" type="button">Clear</button>
+        <div id="error" class="error"></div>
+    </div>
+
+    <div id="result" class="card hidden"></div>
+</div>
+
+<script>
+const fileCountSelect = document.getElementById('fileCount');
+const filesContainer = document.getElementById('filesContainer');
+const compareBtn = document.getElementById('compareBtn');
+const clearBtn = document.getElementById('clearBtn');
+const result = document.getElementById('result');
+const errorBox = document.getElementById('error');
+
+function createFileInputs() {
+    const count = Number(fileCountSelect.value);
+    filesContainer.innerHTML = '';
+
+    for (let i = 1; i <= count; i++) {
+        const box = document.createElement('div');
+        box.className = 'file-box';
+        box.innerHTML = `
+            <h3>Excel File ${i}</h3>
+            <div class="small">Select .xlsx, .xls or .csv</div>
+            <input type="file" class="excel-input" data-index="${i}" accept=".xlsx,.xls,.csv">
+            <div id="name${i}" class="small"></div>
+        `;
+        filesContainer.appendChild(box);
+
+        const input = box.querySelector('input');
+        input.addEventListener('change', () => {
+            const name = input.files[0] ? input.files[0].name : '';
+            document.getElementById('name' + i).textContent = name;
+        });
+    }
+}
+
+fileCountSelect.addEventListener('change', createFileInputs);
+createFileInputs();
+
+function normalizeValue(value) {
+    if (value === null || value === undefined) return '';
+
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+
+    if (typeof value === 'number') {
+        if (Number.isNaN(value)) return '';
+        return Number.isInteger(value) ? String(value) : String(value);
+    }
+
+    return String(value).trim();
+}
+
+function rowKey(row) {
+    return row.map(normalizeValue).join('\u001F');
+}
+
+function makeRectangular(rows) {
+    let maxCols = 0;
+    rows.forEach(r => { if (r.length > maxCols) maxCols = r.length; });
+
+    return rows.map(r => {
+        const out = r.slice();
+        while (out.length < maxCols) out.push('');
+        return out.map(normalizeValue);
+    });
+}
+
+async function readWorkbook(file) {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, {
+        type: 'array',
+        cellDates: true,
+        raw: true
+    });
+
+    if (!workbook.SheetNames.length) {
+        throw new Error('The workbook contains no worksheets.');
+    }
+
+    // The first worksheet is used for each uploaded workbook.
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: '',
+        blankrows: true,
+        raw: true
+    });
+
+    return {
+        sheetName,
+        rows: makeRectangular(rows)
+    };
+}
+
+function countNonEmptyRows(rows) {
+    return rows.filter(r => r.some(v => normalizeValue(v) !== '')).length;
+}
+
+function cleanTrailingEmptyRows(rows) {
+    let end = rows.length;
+    while (end > 0 && rows[end - 1].every(v => normalizeValue(v) === '')) end--;
+    return rows.slice(0, end);
+}
+
+function buildRowMap(rows) {
+    const map = new Map();
+
+    rows.forEach((row, index) => {
+        const key = rowKey(row);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(index + 1);
+    });
+
+    return map;
+}
+
+function compareAgainstReference(referenceRows, otherRows) {
+    const refMap = buildRowMap(referenceRows);
+    const otherMap = buildRowMap(otherRows);
+
+    const missing = [];
+    const extra = [];
+
+    for (const [key, positions] of refMap.entries()) {
+        const otherPositions = otherMap.get(key) || [];
+        const common = Math.min(positions.length, otherPositions.length);
+
+        for (let i = common; i < positions.length; i++) {
+            missing.push({
+                row: referenceRows[positions[i] - 1],
+                referenceRow: positions[i]
+            });
+        }
+    }
+
+    for (const [key, positions] of otherMap.entries()) {
+        const refPositions = refMap.get(key) || [];
+        const common = Math.min(positions.length, refPositions.length);
+
+        for (let i = common; i < positions.length; i++) {
+            extra.push({
+                row: otherRows[positions[i] - 1],
+                otherRow: positions[i]
+            });
+        }
+    }
+
+    return {
+        same: missing.length === 0 && extra.length === 0,
+        missing,
+        extra
+    };
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function rowHtml(row, rowNumber, badgeClass, badgeText, maxCols) {
+    const padded = row.concat(Array(maxCols - row.length).fill(''));
+
+    return `<tr>
+        <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+        <td>${rowNumber}</td>
+        ${padded.map(v => `<td>${escapeHtml(v)}</td>`).join('')}
+    </tr>`;
+}
+
+function renderResult(files, datasets, allComparisons) {
+    const allSame = allComparisons.every(c => c.same);
+
+    const maxCols = Math.max(
+        ...datasets.map(d =>
+            d.rows.reduce((m, r) => Math.max(m, r.length), 0)
+        )
+    );
+
+    let totalMissing = 0;
+    let totalExtra = 0;
+
+    allComparisons.forEach(c => {
+        totalMissing += c.missing.length;
+        totalExtra += c.extra.length;
+    });
+
+    let html = `
+        <div class="status ${allSame ? 'match' : 'not-match'}">
+            ${allSame
+                ? '✓ DATA MATCH — All uploaded Excel files contain the same data.'
+                : '✗ DATA NOT MATCH — One or more uploaded Excel files contain differences.'}
+        </div>
+
+        <div class="summary">
+            <div class="metric">
+                <div class="number">${files.length}</div>
+                <div class="label">Files Compared</div>
+            </div>
+            <div class="metric">
+                <div class="number">${countNonEmptyRows(datasets[0].rows)}</div>
+                <div class="label">Rows in File 1</div>
+            </div>
+            <div class="metric">
+                <div class="number">${totalMissing + totalExtra}</div>
+                <div class="label">Total Differences</div>
+            </div>
+            <div class="metric">
+                <div class="number">${allSame ? '100%' : 'NOT MATCH'}</div>
+                <div class="label">Overall Result</div>
+            </div>
+        </div>
+
+        <h3 class="section-title">Uploaded Files</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Input</th><th>File Name</th><th>Sheet</th><th>Rows</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+    `;
+
+    files.forEach((file, i) => {
+        const status = i === 0
+            ? 'Reference'
+            : (allComparisons[i - 1].same ? 'MATCH' : 'NOT MATCH');
+
+        const badge = status === 'MATCH' || status === 'Reference'
+            ? 'badge-extra'
+            : 'badge-missing';
+
+        html += `
+            <tr>
+                <td>Input ${i + 1}</td>
+                <td>${escapeHtml(file.name)}</td>
+                <td>${escapeHtml(datasets[i].sheetName)}</td>
+                <td>${countNonEmptyRows(datasets[i].rows)}</td>
+                <td><span class="badge ${badge}">${status}</span></td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div>`;
+
+    if (!allSame) {
+        html += `<h3 class="section-title" style="margin-top:24px;">Differences</h3>`;
+
+        allComparisons.forEach((comparison, index) => {
+            if (comparison.same) return;
+
+            const fileNumber = index + 2;
+            html += `
+                <h4>Input 1 vs Input ${fileNumber} — ${escapeHtml(files[fileNumber - 1].name)}</h4>
+            `;
+
+            html += `
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Row</th>
+                                ${Array.from({length: maxCols}, (_, i) => `<th>Column ${i + 1}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            comparison.missing.forEach(item => {
+                html += rowHtml(
+                    item.row,
+                    item.referenceRow,
+                    'badge-missing',
+                    `Missing in Input ${fileNumber}`,
+                    maxCols
+                );
+            });
+
+            comparison.extra.forEach(item => {
+                html += rowHtml(
+                    item.row,
+                    item.otherRow,
+                    'badge-extra',
+                    `Extra in Input ${fileNumber}`,
+                    maxCols
+                );
+            });
+
+            html += `</tbody></table></div>`;
+        });
+    } else {
+        html += `
+            <div class="status match" style="margin-top:18px;">
+                All records match across all ${files.length} files.
+                Row order is ignored and duplicate records are counted correctly.
+            </div>
+        `;
+    }
+
+    html += `
+        <p class="small">
+            <strong>Comparison rule:</strong> Each row is treated as a complete record.
+            Row order is ignored. Duplicate rows are counted. Every file is compared
+            against Input 1. If any record is missing, extra, or duplicated differently,
+            the overall result is NOT MATCH.
+        </p>
+    `;
+
+    result.innerHTML = html;
+    result.classList.remove('hidden');
+}
+
+compareBtn.addEventListener('click', async () => {
+    errorBox.textContent = '';
+    result.classList.add('hidden');
+
+    const inputs = Array.from(document.querySelectorAll('.excel-input'));
+    const files = inputs.map(input => input.files[0]);
+
+    const missingInput = files.findIndex(file => !file);
+
+    if (missingInput !== -1) {
+        errorBox.textContent =
+            `Please select a file for Input ${missingInput + 1}.`;
+        return;
+    }
+
+    compareBtn.disabled = true;
+    compareBtn.textContent = 'Comparing...';
+
+    try {
+        const datasets = await Promise.all(files.map(readWorkbook));
+
+        datasets.forEach(d => {
+            d.rows = cleanTrailingEmptyRows(d.rows);
+        });
+
+        const reference = datasets[0].rows;
+
+        const comparisons = [];
+        for (let i = 1; i < datasets.length; i++) {
+            comparisons.push(
+                compareAgainstReference(reference, datasets[i].rows)
+            );
+        }
+
+        renderResult(files, datasets, comparisons);
+    } catch (err) {
+        console.error(err);
+        errorBox.textContent =
+            'Unable to read one or more Excel files. Please check that they are valid .xlsx/.xls/.csv files.';
+    } finally {
+        compareBtn.disabled = false;
+        compareBtn.textContent = 'Compare Files';
+    }
+});
+
+clearBtn.addEventListener('click', () => {
+    fileCountSelect.value = '2';
+    createFileInputs();
+    errorBox.textContent = '';
+    result.innerHTML = '';
+    result.classList.add('hidden');
+});
+</script>
+
+</body>
+</html>
